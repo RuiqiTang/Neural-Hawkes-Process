@@ -17,9 +17,9 @@ from dlhp.visualization.visualization import *
 def main():
     # 1. Configuration
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    pattern=r"G:\CodeRemote\Neural-Hawkes-Process\dlhp\data\TrainingSet\*.csv"
+    pattern=r"G:\CodeRemote\Neural-Hawkes-Process\dlhp\data\Test\*.csv"
     DATA_PATHS = glob.glob(pattern)
-    EPOCHS = 25
+    EPOCHS = 5
     BATCH_SIZE = 2  # Use a small batch size as sequences can be long and memory usage can be high
     LR = 1e-3
     MC_SAMPLES = 100  # Number of Monte Carlo samples for integral approximation in log-likelihood
