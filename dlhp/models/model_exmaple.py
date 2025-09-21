@@ -463,7 +463,7 @@ def collate_pad(batch: List[Dict]):
 
 # ---------------------- Training loop -----------------------------------
 
-def train(model: DLHPExact, train_loader: DataLoader, val_loader: DataLoader, device: torch.device, 
+def train(model: DLHPExact, train_loader: DataLoader, device: torch.device, 
          epochs: int = 10, lr: float = 1e-3, mc_samples: int = 200, 
          log_dir: str = "runs/dlhp_experiment", patience: int = 5):
     """
@@ -527,43 +527,16 @@ def train(model: DLHPExact, train_loader: DataLoader, val_loader: DataLoader, de
 
         avg_train_loss = total_loss / count
         
-        # Validation phase
-        model.eval()
-        val_total_loss = 0.0
-        val_count = 0
-        with torch.no_grad():
-            for batch in val_loader:
-                val_batch_loss = 0.0
-                for item in batch:
-                    times = item['times'].to(device)
-                    marks = item['marks'].to(device)
-                    T = float(item['T'])
-                    if len(times) == 0:
-                        continue
-                    ll = model.log_likelihood(times, marks, T, u_inputs=None, mc_samples=mc_samples)
-                    loss = -ll
-                    val_batch_loss += loss.item()
-                if val_batch_loss > 0:
-                    val_total_loss += val_batch_loss / len(batch)
-                    val_count += 1
         
-        model.train()
-        
-        if val_count == 0:
-            print(f"Epoch {epoch+1}/{epochs} - No valid batches found in validation")
-            continue
-            
-        avg_val_loss = val_total_loss / val_count
-        print(f"Epoch {epoch+1}/{epochs} train_loss={avg_train_loss:.4f} val_loss={avg_val_loss:.4f} time={time.time()-start:.1f}s")
+        print(f"Epoch {epoch+1}/{epochs} train_loss={avg_train_loss:.4f} time={time.time()-start:.1f}s")
 
         # TensorBoard logging
         writer.add_scalar('Loss/train', avg_train_loss, epoch)
-        writer.add_scalar('Loss/val', avg_val_loss, epoch)
         writer.add_scalar('LearningRate', optimizer.param_groups[0]['lr'], epoch)
 
         # Early stopping check (based on validation loss)
-        if avg_val_loss < best_loss:
-            best_loss = avg_val_loss
+        if avg_train_loss < best_loss:
+            best_loss = avg_train_loss
             patience_counter = 0
             # Save the best model state
             best_model_state = model.state_dict()
