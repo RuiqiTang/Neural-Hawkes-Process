@@ -141,23 +141,20 @@ def collate_variable(batch):
     # Keep batch as list of dicts for DLHP training loop
     return batch
 
-def create_data_loaders(dataset, batch_size=8, train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, seed=42):
+def create_data_loaders(dataset, batch_size=8, train_ratio=0.8, seed=42):
     """
-    Create train, validation, and test dataloaders from a dataset.
+    Create train and test dataloaders from a dataset with 4:1 ratio.
     
     Args:
         dataset: The full dataset
         batch_size: Batch size for the dataloaders
-        train_ratio: Proportion of data to use for training
-        val_ratio: Proportion of data to use for validation
-        test_ratio: Proportion of data to use for testing
+        train_ratio: Proportion of data to use for training (default 0.8 for 4:1 ratio)
         seed: Random seed for reproducibility
         
     Returns:
-        train_loader, val_loader, test_loader
+        train_loader, test_loader
     """
-    assert np.isclose(train_ratio + val_ratio + test_ratio, 1.0), \
-        "Ratios must sum to 1"
+    assert train_ratio > 0 and train_ratio < 1, "Train ratio must be between 0 and 1"
     
     # Set random seed for reproducibility
     torch.manual_seed(seed)
@@ -165,13 +162,12 @@ def create_data_loaders(dataset, batch_size=8, train_ratio=0.8, val_ratio=0.1, t
     # Calculate lengths for splits
     total_size = len(dataset)
     train_size = int(train_ratio * total_size)
-    val_size = int(val_ratio * total_size)
-    test_size = total_size - train_size - val_size  # Take the rest to ensure we use all data
+    test_size = total_size - train_size  # Take the rest to ensure we use all data
     
     # Split the dataset
-    train_dataset, val_dataset, test_dataset = random_split(
+    train_dataset, test_dataset = random_split(
         dataset, 
-        [train_size, val_size, test_size],
+        [train_size, test_size],
         generator=torch.Generator().manual_seed(seed)
     )
     
@@ -180,13 +176,6 @@ def create_data_loaders(dataset, batch_size=8, train_ratio=0.8, val_ratio=0.1, t
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        collate_fn=collate_variable
-    )
-    
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
         collate_fn=collate_variable
     )
     
@@ -199,7 +188,6 @@ def create_data_loaders(dataset, batch_size=8, train_ratio=0.8, val_ratio=0.1, t
     
     print(f"Dataset split sizes:")
     print(f"Train: {len(train_dataset)} sequences")
-    print(f"Validation: {len(val_dataset)} sequences")
     print(f"Test: {len(test_dataset)} sequences")
     
-    return train_loader, val_loader, test_loader
+    return train_loader, test_loader

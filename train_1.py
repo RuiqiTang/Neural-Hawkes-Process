@@ -28,10 +28,8 @@ def main():
     PATIENCE = 5
     LOG_DIR = os.path.join("runs", "dlhp_experiment_" + time.strftime("%Y%m%d-%H%M%S"))
     
-    # Dataset split configuration
-    TRAIN_RATIO = 0.8
-    VAL_RATIO = 0.1
-    TEST_RATIO = 0.1
+    # Dataset split configuration (4:1 ratio)
+    TRAIN_RATIO = 0.8  # 4/(4+1) = 0.8
 
     # Model Hyperparameters
     L = 2      # Number of layers in the DLHP stack
@@ -89,13 +87,11 @@ def main():
         raise ValueError(f"Found mark ID {max_mark} which is >= number of event types {K}. "
                         f"This indicates a mismatch between event_id mapping and the marks in the data.")
     
-    # Create train, validation, and test data loaders
-    train_loader, val_loader, test_loader = create_data_loaders(
+    # Create train and test data loaders (4:1 ratio)
+    train_loader, test_loader = create_data_loaders(
         dataset,
         batch_size=BATCH_SIZE,
-        train_ratio=TRAIN_RATIO,
-        val_ratio=VAL_RATIO,
-        test_ratio=TEST_RATIO
+        train_ratio=TRAIN_RATIO
     )
 
     # 3. Create model
@@ -118,13 +114,11 @@ def main():
     train(
         model=model,
         train_loader=train_loader,
-        val_loader=val_loader,
         device=DEVICE,
         epochs=EPOCHS,
         lr=LR,
         mc_samples=MC_SAMPLES,
-        log_dir=LOG_DIR,
-        patience=PATIENCE
+        log_dir=LOG_DIR
     )
 
     # 5. Evaluate on test set
