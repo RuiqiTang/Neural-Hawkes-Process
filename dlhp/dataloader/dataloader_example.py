@@ -3,13 +3,17 @@ DLHP DataLoader for tabular error log data
 
 This module implements a PyTorch Dataset and collate function that
 transform tabular machine error logs with columns:
-    TimeStamp, ST1_Err, ST2_Err, ST3_Err, ST4_Err, OEECause
+    TimeStamp, ST{num}_Err (variable number of ST columns), OEECause
 into event sequences suitable for DLHP training.
 
 Each row may contain multiple event triggers (for each STx_Err and OEE cause).
 We map each possible ErrorCode and OEECause to unique integer marks.
 The Dataset then outputs sequences with fields: times, marks, T.
 
+Example of supported column formats:
+    - TimeStamp, ST1_Err, ST2_Err, OEECause
+    - TimeStamp, ST1_Err, ST3_Err, ST5_Err, OEECause
+    etc.
 """
 
 import pandas as pd
@@ -34,10 +38,23 @@ class ErrorLogDLHPDataset(Dataset):
         dfs = [pd.read_csv(fp) for fp in file_paths]
         df = pd.concat(dfs, ignore_index=True)
 
+        # Verify required columns exist
+        if time_col not in df.columns:
+            raise ValueError(f"TimeStamp column '{time_col}' not found in the data")
+        if oee_col not in df.columns:
+            raise ValueError(f"OEE cause column '{oee_col}' not found in the data")
+
         # Dynamically find st_cols from dataframe columns
         if st_cols is None:
             self.st_cols = [col for col in df.columns if col.startswith('ST') and col.endswith('_Err')]
+            if not self.st_cols:
+                raise ValueError("No ST*_Err columns found in the data")
+            print(f"Found ST columns: {', '.join(self.st_cols)}")
         else:
+            # Verify that provided st_cols exist in the data
+            missing_cols = [col for col in st_cols if col not in df.columns]
+            if missing_cols:
+                raise ValueError(f"Following ST columns were not found in the data: {', '.join(missing_cols)}")
             self.st_cols = st_cols
 
         # build vocab of all event types (ErrorCodes + OEECause)
@@ -65,14 +82,39 @@ class ErrorLogDLHPDataset(Dataset):
         for fp, df_seq in zip(file_paths, dfs):
             events = []
             for _, row in df_seq.iterrows():
-                t = pd.to_datetime(row[self.time_col]).timestamp()
+                try:
+                    t = pd.to_datetime(row[self.time_col]).timestamp()
+                except (ValueError, TypeError) as e:
+                    print(f"Warning: Invalid timestamp in row {row.name}: {row[self.time_col]}")
+                    continue
+
+                # Process ST error columns
                 for col in self.st_cols:
-                    val = row[col]
-                    if pd.notna(val):
-                        events.append((t, self.event2id[f"ST:{val}"]))
-                val = row[self.oee_col]
-                if pd.notna(val):
-                    events.append((t, self.event2id[f"OEE:{val}"]))
+                    try:
+                        val = row[col]
+                        if pd.notna(val) and val != '':  # Check for both NaN and empty string
+                            event_key = f"ST:{val}"
+                            if event_key in self.event2id:  # Only add if we have seen this event type before
+                                events.append((t, self.event2id[event_key]))
+                            else:
+                                print(f"Warning: Unknown ST event '{val}' in column {col}")
+                    except KeyError:
+                        # This shouldn't happen now due to our column validation, but keep as safety
+                        print(f"Warning: Column {col} not found in data")
+                        continue
+
+                # Process OEE cause
+                try:
+                    val = row[self.oee_col]
+                    if pd.notna(val) and val != '':
+                        event_key = f"OEE:{val}"
+                        if event_key in self.event2id:
+                            events.append((t, self.event2id[event_key]))
+                        else:
+                            print(f"Warning: Unknown OEE event '{val}'")
+                except KeyError:
+                    print(f"Warning: OEE column {self.oee_col} not found in data")
+
             # sort events by time
             events.sort(key=lambda x: x[0])
             if not events:
