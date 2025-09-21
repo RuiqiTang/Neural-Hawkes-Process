@@ -63,7 +63,16 @@ class ErrorLogDLHPDataset(Dataset):
         # build vocab of ST error types only
         st_values = []
         for col in self.st_cols:
-            st_values.extend(df[col].dropna().unique().tolist())
+            # 获取所有非空值
+            values = df[col].dropna().unique().tolist()
+            # 对每个值进行处理，只保留冒号前的部分
+            processed_values = []
+            for v in values:
+                if pd.notna(v) and str(v).strip():
+                    # 如果值包含冒号，只取冒号前的部分
+                    event_type = str(v).split(':')[0] if ':' in str(v) else str(v)
+                    processed_values.append(event_type)
+            st_values.extend(processed_values)
 
         # assign unique ids (only for ST events)
         self.event2id = {}
@@ -71,14 +80,12 @@ class ErrorLogDLHPDataset(Dataset):
 
         # print("Found ST events:", st_values)
 
-        # 分配 ST 事件的 ID
+        # 分配事件的 ID（不再添加"ST:"前缀）
         idx = 0
         for v in st_values:
-            if pd.notna(v) and str(v).strip():  # 确保值有效
-                key = f"ST:{v}"
-                if key not in self.event2id:
-                    self.event2id[key] = idx
-                    idx += 1
+            if v.strip():  # 确保值有效
+                self.event2id[v] = idx
+                idx += 1
 
         self.id2event = {i: e for e, i in self.event2id.items()}
 
@@ -103,11 +110,12 @@ class ErrorLogDLHPDataset(Dataset):
                     try:
                         val = row[col]
                         if pd.notna(val) and val != '':  # Check for both NaN and empty string
-                            event_key = f"ST:{val}"
-                            if event_key in self.event2id:  # Only add if we have seen this event type before
-                                events.append((t, self.event2id[event_key]))
+                            # 处理事件值，只保留冒号前的部分
+                            event_type = str(val).split(':')[0] if ':' in str(val) else str(val)
+                            if event_type in self.event2id:  # Only add if we have seen this event type before
+                                events.append((t, self.event2id[event_type]))
                             else:
-                                print(f"Warning: Unknown ST event '{val}' in column {col}")
+                                print(f"Warning: Unknown event type '{event_type}' in column {col}")
                     except KeyError:
                         # This shouldn't happen now due to our column validation, but keep as safety
                         print(f"Warning: Column {col} not found in data")
