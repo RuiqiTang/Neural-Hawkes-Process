@@ -1,21 +1,3 @@
-"""
-DLHP DataLoader for tabular error log data
-
-This module implements a PyTorch Dataset and collate function that
-transform tabular machine error logs with columns:
-    TimeStamp, ST{num}_Err (variable number of ST columns), OEECause
-into event sequences suitable for DLHP training.
-
-Each row may contain multiple event triggers (for each STx_Err and OEE cause).
-We map each possible ErrorCode and OEECause to unique integer marks.
-The Dataset then outputs sequences with fields: times, marks, T.
-
-Example of supported column formats:
-    - TimeStamp, ST1_Err, ST2_Err, OEECause
-    - TimeStamp, ST1_Err, ST3_Err, ST5_Err, OEECause
-    etc.
-"""
-
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split
@@ -65,16 +47,34 @@ class ErrorLogDLHPDataset(Dataset):
 
         # assign unique ids
         self.event2id = {}
+        st_values = sorted(set(st_values))  # 确保唯一性和确定性顺序
+        oee_values = sorted(set(oee_values))  # 确保唯一性和确定性顺序
+
+        print("Found ST events:", st_values)
+        print("Found OEE events:", oee_values)
+
+        # 首先分配 ST 事件的 ID
         idx = 0
         for v in st_values:
-            if v not in self.event2id:
-                self.event2id[f"ST:{v}"] = idx
-                idx += 1
+            if pd.notna(v) and str(v).strip():  # 确保值有效
+                key = f"ST:{v}"
+                if key not in self.event2id:
+                    self.event2id[key] = idx
+                    idx += 1
+
+        # 然后分配 OEE 事件的 ID
         for v in oee_values:
-            if v not in self.event2id:
-                self.event2id[f"OEE:{v}"] = idx
-                idx += 1
+            if pd.notna(v) and str(v).strip():  # 确保值有效
+                key = f"OEE:{v}"
+                if key not in self.event2id:
+                    self.event2id[key] = idx
+                    idx += 1
+
         self.id2event = {i: e for e, i in self.event2id.items()}
+
+        print("Event ID mapping:")
+        for event, idx in sorted(self.event2id.items(), key=lambda x: x[1]):
+            print(f"  {idx}: {event}")
 
         # convert df to list of sequences grouped by day or file (simple choice)
         # Here we treat each file as one sequence

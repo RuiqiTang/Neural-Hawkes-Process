@@ -14,17 +14,17 @@ import glob
 def main():
     # 1. Configuration
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    pattern=r"G:\CodeRemote\Neural-Hawkes-Process\dlhp\data\TrainingSet\*.csv"
+    pattern=r"G:\CodeRemote\Neural-Hawkes-Process\dlhp\data\Test\*.csv"
     DATA_PATHS = glob.glob(pattern)
-    EPOCHS = 25
+    EPOCHS = 5
     BATCH_SIZE = 2  # Use a small batch size as sequences can be long and memory usage can be high
     LR = 1e-3
     MC_SAMPLES = 100  # Number of Monte Carlo samples for integral approximation in log-likelihood
-    
+
     # Early stopping and logging configuration
     PATIENCE = 5
     LOG_DIR = os.path.join("runs", "dlhp_experiment_" + time.strftime("%Y%m%d-%H%M%S"))
-    
+
     # Dataset split configuration
     TRAIN_RATIO = 0.8
     VAL_RATIO = 0.1
@@ -39,7 +39,7 @@ def main():
     print("Loading data...")
     # The dataset processes the CSV and converts it into sequences of events.
     dataset = ErrorLogDLHPDataset(file_paths=DATA_PATHS)
-    
+
     if len(dataset) == 0:
         print("No sequences found in the data. Please check the data file and dataloader.")
         return
@@ -47,6 +47,16 @@ def main():
     K = len(dataset.event2id)  # Number of unique event types (marks)
     print(f"Found {len(dataset)} sequences.")
     print(f"Found {K} unique event types (marks).")
+
+    # Verify marks are within valid range
+    max_mark = -1
+    for seq in dataset.sequences:
+        if len(seq['marks']) > 0:
+            max_mark = max(max_mark, seq['marks'].max().item())
+
+    if max_mark >= K:
+        raise ValueError(f"Found mark ID {max_mark} which is >= number of event types {K}. "
+                        f"This indicates a mismatch between event_id mapping and the marks in the data.")
     
     # Create train, validation, and test data loaders
     train_loader, val_loader, test_loader = create_data_loaders(
