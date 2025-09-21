@@ -4,17 +4,19 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import numpy as np
 
 class ErrorLogDLHPDataset(Dataset):
-    def __init__(self, file_paths, time_col='TimeStamp', st_cols=None, oee_col='OEECause'):
+    def __init__(self, file_paths, time_col='TimeStamp', st_cols=None, oee_col='OEECause', oee_st_col=None):
         """
         Args:
             file_paths: list of CSV file paths
             time_col: name of the timestamp column
             st_cols: list of ST error columns (default ST1_Err ... ST4_Err)
             oee_col: name of the OEE cause column
+            oee_st_col: name of the column containing ST information (e.g., 'OEE_ST')
         """
         self.file_paths = file_paths
         self.time_col = time_col
         self.oee_col = oee_col
+        self.oee_st_col = oee_st_col
 
         # load all dataframes
         dfs = [pd.read_csv(fp) for fp in file_paths]
@@ -26,18 +28,37 @@ class ErrorLogDLHPDataset(Dataset):
         if oee_col not in df.columns:
             raise ValueError(f"OEE cause column '{oee_col}' not found in the data")
 
-        # Dynamically find st_cols from dataframe columns
-        if st_cols is None:
-            self.st_cols = [col for col in df.columns if col.startswith('ST') and col.endswith('_Err')]
-            if not self.st_cols:
-                raise ValueError("No ST*_Err columns found in the data")
-            print(f"Found ST columns: {', '.join(self.st_cols)}")
+        # Get ST column based on OEE_st if provided
+        if self.oee_st_col is not None:
+            if self.oee_st_col not in df.columns:
+                raise ValueError(f"OEE_ST column '{self.oee_st_col}' not found in the data")
+            
+            # Get the ST number from OEE_st column
+            st_values = df[self.oee_st_col].dropna().unique().tolist()
+            if not st_values:
+                raise ValueError(f"No ST values found in {self.oee_st_col}")
+            
+            st_number = st_values[0]  # Take the first ST value
+            st_col = f"{st_number}_Err"
+            
+            if st_col not in df.columns:
+                raise ValueError(f"Column {st_col} not found in the data")
+            
+            self.st_cols = [st_col]
+            print(f"Using ST column based on {self.oee_st_col}: {st_col}")
         else:
-            # Verify that provided st_cols exist in the data
-            missing_cols = [col for col in st_cols if col not in df.columns]
-            if missing_cols:
-                raise ValueError(f"Following ST columns were not found in the data: {', '.join(missing_cols)}")
-            self.st_cols = st_cols
+            # Original dynamic ST columns detection
+            if st_cols is None:
+                self.st_cols = [col for col in df.columns if col.startswith('ST') and col.endswith('_Err')]
+                if not self.st_cols:
+                    raise ValueError("No ST*_Err columns found in the data")
+                print(f"Found ST columns: {', '.join(self.st_cols)}")
+            else:
+                # Verify that provided st_cols exist in the data
+                missing_cols = [col for col in st_cols if col not in df.columns]
+                if missing_cols:
+                    raise ValueError(f"Following ST columns were not found in the data: {', '.join(missing_cols)}")
+                self.st_cols = st_cols
 
         # build vocab of all event types (ErrorCodes + OEECause)
         st_values = []
