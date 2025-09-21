@@ -27,12 +27,17 @@ class ErrorLogDLHPDataset(Dataset):
         """
         self.file_paths = file_paths
         self.time_col = time_col
-        self.st_cols = st_cols or [f'ST{i}_Err' for i in range(1,5)]
         self.oee_col = oee_col
 
         # load all dataframes
         dfs = [pd.read_csv(fp) for fp in file_paths]
         df = pd.concat(dfs, ignore_index=True)
+
+        # Dynamically find st_cols from dataframe columns
+        if st_cols is None:
+            self.st_cols = [col for col in df.columns if col.startswith('ST') and col.endswith('_Err')]
+        else:
+            self.st_cols = st_cols
 
         # build vocab of all event types (ErrorCodes + OEECause)
         st_values = []
@@ -86,13 +91,3 @@ class ErrorLogDLHPDataset(Dataset):
 def collate_variable(batch):
     # Keep batch as list of dicts for DLHP training loop
     return batch
-
-
-# Example usage
-if __name__ == '__main__':
-    files = ['log1.csv', 'log2.csv']
-    dataset = ErrorLogDLHPDataset(files)
-    print('Num sequences:', len(dataset))
-    print('Event vocab size:', len(dataset.event2id))
-    sample = dataset[0]
-    print(sample['times'][:10], sample['marks'][:10])

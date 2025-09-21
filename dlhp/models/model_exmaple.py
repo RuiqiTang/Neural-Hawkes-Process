@@ -51,6 +51,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 # ---------------------- Numerical helpers ---------------------------------
 
@@ -462,10 +463,31 @@ def collate_pad(batch: List[Dict]):
 
 # ---------------------- Training loop -----------------------------------
 
-def train(model: DLHPExact, dataset: EventSequenceDataset, device: torch.device, epochs: int = 10, batch_size: int = 8, lr: float = 1e-3, mc_samples: int = 200):
+def train(model: DLHPExact, dataset: EventSequenceDataset, device: torch.device, epochs: int = 10, batch_size: int = 8, lr: float = 1e-3, mc_samples: int = 200, log_dir: str = "runs/dlhp_experiment", patience: int = 5):
+    """
+    Train the DLHP model with TensorBoard logging and early stopping.
+
+    Args:
+        model: The DLHPExact model instance.
+        dataset: The dataset of event sequences.
+        device: The device to train on (cpu or cuda).
+        epochs: Maximum number of training epochs.
+        batch_size: Number of sequences per batch.
+        lr: Learning rate for the Adam optimizer.
+        mc_samples: Number of Monte Carlo samples for integral approximation.
+        log_dir: Directory to save TensorBoard logs.
+        patience: Number of epochs to wait for improvement before early stopping.
+    """
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda b: b)
+    writer = SummaryWriter(log_dir)
+
+    best_loss = float('inf')
+    patience_counter = 0
+    best_model_state = None
+
+    print(f"TensorBoard logs will be saved to: {log_dir}")
 
     for epoch in range(epochs):
         model.train()
@@ -480,15 +502,61 @@ def train(model: DLHPExact, dataset: EventSequenceDataset, device: torch.device,
                 times = item['times'].to(device)
                 marks = item['marks'].to(device)
                 T = float(item['T'])
+                
+                # Skip sequences that are too short
+                if len(times) == 0:
+                    continue
+
                 ll = model.log_likelihood(times, marks, T, u_inputs=None, mc_samples=mc_samples)
                 loss = -ll
                 loss_batch = loss_batch + loss
+            
+            if loss_batch == 0.0:
+                continue
+
             loss_batch = loss_batch / len(batch)
             loss_batch.backward()
+            # Optional: Gradient clipping can help stabilize training
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             total_loss += loss_batch.item()
             count += 1
-        print(f"Epoch {epoch+1}/{epochs} avg_loss={total_loss/count:.4f} time={time.time()-start:.1f}s")
+        
+        if count == 0:
+            print(f"Epoch {epoch+1}/{epochs} - No valid batches found, skipping.")
+            continue
+
+        avg_loss = total_loss / count
+        print(f"Epoch {epoch+1}/{epochs} avg_loss={avg_loss:.4f} time={time.time()-start:.1f}s")
+
+        # TensorBoard logging
+        writer.add_scalar('Loss/train', avg_loss, epoch)
+        writer.add_scalar('LearningRate', optimizer.param_groups[0]['lr'], epoch)
+
+        # Early stopping check
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            patience_counter = 0
+            # Save the best model state
+            best_model_state = model.state_dict()
+            print(f"  -> New best loss: {best_loss:.4f}. Model state saved.")
+        else:
+            patience_counter += 1
+            print(f"  -> No improvement in loss for {patience_counter} epoch(s).")
+
+        if patience_counter >= patience:
+            print(f"Early stopping triggered after {patience} epochs with no improvement.")
+            # Restore the best model state before stopping
+            if best_model_state:
+                model.load_state_dict(best_model_state)
+            break
+    
+    writer.close()
+    print("Training finished.")
+    # Restore the best model at the end of training
+    if best_model_state:
+        model.load_state_dict(best_model_state)
+        print("Loaded best model state.")
 
 # ---------------------- Quick example (smoke test) -----------------------
 
@@ -507,31 +575,3 @@ def generate_homogeneous_poisson(T=10.0, rate=1.0, K=5):
     times = torch.tensor(times, dtype=torch.float32)
     marks = torch.randint(0, K, size=(times.shape[0],), dtype=torch.long)
     return {'times': times, 'marks': marks, 'T': T}
-
-
-if __name__ == '__main__':
-    # quick run
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    torch.manual_seed(42)
-
-    # small model hyperparams
-    L = 2
-    P = 6
-    H = 12
-    K = 5
-    model = DLHPExact(L=L, P=P, H=H, K=K, diag_param=True, input_dependent=True).to(device)
-
-    # small synthetic dataset
-    sequences = [generate_homogeneous_poisson(T=8.0, rate=1.0, K=K) for _ in range(64)]
-    ds = EventSequenceDataset(sequences)
-
-    # train a couple epochs as a smoke test
-    train(model, ds, device, epochs=3, batch_size=8, lr=1e-3, mc_samples=50)
-
-    # evaluate log-likelihood on one sequence
-    s = sequences[0]
-    with torch.no_grad():
-        ll = model.log_likelihood(s['times'].to(device), s['marks'].to(device), float(s['T']), mc_samples=200)
-    print('example ll', ll.item())
-
-# End of file
