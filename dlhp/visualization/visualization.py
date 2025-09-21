@@ -3,7 +3,9 @@ import matplotlib.pyplot as plt
 import torch
 import os
 from typing import List, Dict, Tuple
-
+import matplotlib
+import torch.nn.functional as F
+matplotlib.use('TkAgg')
 # -------------------------
 # 1) Raster / timeline plot
 # -------------------------
@@ -39,6 +41,34 @@ def plot_sequence_raster(times: np.ndarray, marks: np.ndarray, id2event: Dict[in
 # ---------------------------------------
 # 2) Cross-correlogram (empirical)
 # ---------------------------------------
+def cross_correlogram_for_pair(times_i: np.ndarray, times_j: np.ndarray,
+                               window: float = 10.0, bin_size: float = 0.5) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Compute histogram of (t_j - t_i) for all pairs with 0 < dt <= window
+    Returns (bins_centers, counts_normalized) where counts are normalized per reference event (i)
+    """
+    nbins = int(np.ceil(window / bin_size))
+    bins = np.linspace(0, window, nbins+1)
+    counts = np.zeros(nbins, dtype=float)
+    # For each event in i, find j-events that occur after it within window
+    j_idx = 0
+    N_j = len(times_j)
+    for t_i in times_i:
+        # advance j_idx to first j >= t_i
+        while j_idx < N_j and times_j[j_idx] < t_i:
+            j_idx += 1
+        k = j_idx
+        while k < N_j and times_j[k] - t_i <= window:
+            dt = times_j[k] - t_i
+            bin_idx = min(int(dt // bin_size), nbins-1)
+            counts[bin_idx] += 1
+            k += 1
+    # normalize by number of i-events -> average # of j per i per bin
+    if len(times_i) > 0:
+        counts = counts / float(len(times_i))
+    bin_centers = (bins[:-1] + bins[1:]) / 2.0
+    return bin_centers, counts
+
 def plot_cross_correlogram_matrix(sequences: List[Dict], event_ids: List[int],
                                   id2event: Dict[int,str]=None,
                                   window: float = 20.0, bin_size: float = 0.5,
@@ -131,7 +161,7 @@ def compute_model_impulse_response_dlhp_exact(model, mark_k: int,
         V = layer.V  # (D,D)
         V_inv = torch.linalg.inv(V) if torch.det(V) != 0 else torch.pinverse(V)
         # get lambda real and imag (P,)
-        real = -F.softplus(layer.lambda_logreal)
+        real = -F.softplus(layer.lambda_log_real)
         imag = layer.lambda_im
         # for each t compute M_exp (2P x 2P) block diag described earlier
         Xl = torch.zeros((len(t_grid), D), dtype=torch.float32, device=device)
@@ -158,7 +188,7 @@ def compute_model_impulse_response_dlhp_exact(model, mark_k: int,
         # u_l(t) = LayerNorm(GELU(y_l + u_prev)) but layernorm uses statistics across H -> apply samplewise
         # We'll mimic the model's forward: u = layernorm(act(y) + u)
         # For approximate impulse response we apply same nonlinearity and no learned layernorm affine
-        u_l = torch.tensor((torch.nn.functional.gelu(y_l + u_prev).cpu().numpy()), device=device)
+        u_l = torch.tensor((torch.nn.functional.gelu(y_l + u_prev).detach().cpu().numpy()), device=device)
         # apply layernorm manually (normalize across H for each time point)
         mean = u_l.mean(dim=1, keepdim=True)
         std = u_l.std(dim=1, keepdim=True) + 1e-6
@@ -172,7 +202,7 @@ def compute_model_impulse_response_dlhp_exact(model, mark_k: int,
     # u_prev: (T,H)
     proj = (u_prev @ W.t()) + b  # (T,K)
     intensity = s * torch.nn.functional.softplus(proj / s)
-    return intensity.cpu().numpy()  # (T,K)
+    return intensity.detach().cpu().numpy()  # (T,K)
 
 
 def plot_impulse_responses_from_model(model, id2event: Dict[int,str],

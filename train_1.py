@@ -14,12 +14,13 @@ import glob
 import importlib.util
 from dlhp.visualization.visualization import *
 
+
 def main():
     # 1. Configuration
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    pattern=r"G:\CodeRemote\Neural-Hawkes-Process\dlhp\data\Test\*.csv"
+    pattern=r"G:\CodeRemote\Neural-Hawkes-Process\dlhp\data\TrainingSet\*.csv"
     DATA_PATHS = glob.glob(pattern)
-    EPOCHS = 5
+    EPOCHS = 100
     BATCH_SIZE = 2  # Use a small batch size as sequences can be long and memory usage can be high
     LR = 1e-3
     MC_SAMPLES = 100  # Number of Monte Carlo samples for integral approximation in log-likelihood
@@ -148,6 +149,7 @@ def main():
         traceback.print_exc()
         raise  # Re-raise the exception after printing debug info
 
+
     # 5. Evaluate on test set
     model.eval()
     total_test_loss = 0.0
@@ -174,6 +176,11 @@ def main():
         print(f"Test set average loss: {avg_test_loss:.4f}")
     
     print("Training and evaluation finished.")
+
+    # 5+. 保存模型权重
+    model_save_path = os.path.join(LOG_DIR, "model_final.pth")
+    torch.save(model.state_dict(), model_save_path)
+    print(f"Model weights saved to: {model_save_path}")
 
     # 6. Visualization
     print("\nGenerating visualizations...")
