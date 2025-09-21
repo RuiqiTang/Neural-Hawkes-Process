@@ -55,6 +55,29 @@ def main():
     K = len(dataset.event2id)  # Number of unique event types (marks)
     print(f"Found {len(dataset)} sequences.")
     print(f"Found {K} unique event types (marks).")
+
+    # Save event mappings to JSON
+    import json
+    mappings = {
+        'event2id': dataset.event2id,
+        'id2event': dataset.id2event,
+        'st_cols': dataset.st_cols,
+        'total_events': K
+    }
+    
+    # Create mappings directory in LOG_DIR
+    mappings_dir = os.path.join(LOG_DIR, "mappings")
+    os.makedirs(mappings_dir, exist_ok=True)
+    
+    # Save mappings to JSON file
+    mappings_file = os.path.join(mappings_dir, "event_mappings.json")
+    with open(mappings_file, 'w') as f:
+        json.dump(mappings, f, indent=4)
+    
+    print(f"\nEvent mappings saved to: {mappings_file}")
+    print("\nEvent to ID mappings:")
+    for event, idx in sorted(dataset.event2id.items(), key=lambda x: x[1]):
+        print(f"  {event} -> {idx}")
     
     # Verify marks are within valid range
     max_mark = -1
@@ -150,11 +173,13 @@ def main():
 
     # 1. Plot event sequence raster
     print("Plotting event sequence raster...")
+    # Create title with mapping information
+    mapping_info = "Event Mappings:\n" + "\n".join([f"{id_}: {event}" for id_, event in sorted(dataset.id2event.items())])
     plot_sequence_raster(
         times=sample_times,
         marks=sample_marks,
         id2event=dataset.id2event,
-        title="Sample Event Sequence",
+        title=f"Sample Event Sequence\n{mapping_info}",
         max_events=500,
         out_dir=viz_dir,
         fname="event_sequence_raster.png"
