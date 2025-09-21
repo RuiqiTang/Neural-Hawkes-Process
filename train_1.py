@@ -110,16 +110,43 @@ def main():
 
     # 4. Start training
     print(f"Starting training on {DEVICE}...")
-    # The `train` function is imported from the model file and handles the training loop.
-    train(
-        model=model,
-        train_loader=train_loader,
-        device=DEVICE,
-        epochs=EPOCHS,
-        lr=LR,
-        mc_samples=MC_SAMPLES,
-        log_dir=LOG_DIR
-    )
+    try:
+        # Move model to device before training
+        model = model.to(DEVICE)
+        
+        # Print some debug information
+        print("\nDebug Information:")
+        print(f"Number of training sequences: {len(train_loader.dataset)}")
+        print(f"Batch size: {BATCH_SIZE}")
+        print(f"Number of batches: {len(train_loader)}")
+        
+        # Check a sample batch
+        sample_batch = next(iter(train_loader))
+        print("\nSample batch structure:")
+        for i, seq in enumerate(sample_batch):
+            print(f"Sequence {i}:")
+            print(f"  Times shape: {seq['times'].shape}")
+            print(f"  Marks shape: {seq['marks'].shape}")
+            print(f"  T value: {seq['T']}")
+        
+        # The `train` function is imported from the model file and handles the training loop.
+        train(
+            model=model,
+            train_loader=train_loader,
+            device=DEVICE,
+            epochs=EPOCHS,
+            lr=LR,
+            mc_samples=MC_SAMPLES,
+            log_dir=LOG_DIR
+        )
+    except Exception as e:
+        print("\nError during training:")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        import traceback
+        print("\nFull traceback:")
+        traceback.print_exc()
+        raise  # Re-raise the exception after printing debug info
 
     # 5. Evaluate on test set
     model.eval()
