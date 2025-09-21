@@ -42,10 +42,10 @@ def main():
     print("Loading data...")
     # The dataset processes the CSV and converts it into sequences of events.
     dataset = ErrorLogDLHPDataset(
-        file_paths=['your_file.csv'],
+        file_paths=DATA_PATHS,
         time_col='TimeStamp',
         oee_col='OEECause',
-        oee_st_col='OEE_ST'  # 这里指定包含ST信息的列
+        oee_st_col='OEE_st'  # 这里指定包含ST信息的列
     )
     
     if len(dataset) == 0:

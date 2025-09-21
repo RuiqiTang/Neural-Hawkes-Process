@@ -45,14 +45,14 @@ class ErrorLogDLHPDataset(Dataset):
                 raise ValueError(f"Column {st_col} not found in the data")
             
             self.st_cols = [st_col]
-            print(f"Using ST column based on {self.oee_st_col}: {st_col}")
+            # print(f"Using ST column based on {self.oee_st_col}: {st_col}")
         else:
             # Original dynamic ST columns detection
             if st_cols is None:
                 self.st_cols = [col for col in df.columns if col.startswith('ST') and col.endswith('_Err')]
                 if not self.st_cols:
                     raise ValueError("No ST*_Err columns found in the data")
-                print(f"Found ST columns: {', '.join(self.st_cols)}")
+                # print(f"Found ST columns: {', '.join(self.st_cols)}")
             else:
                 # Verify that provided st_cols exist in the data
                 missing_cols = [col for col in st_cols if col not in df.columns]
@@ -71,8 +71,8 @@ class ErrorLogDLHPDataset(Dataset):
         st_values = sorted(set(st_values))  # 确保唯一性和确定性顺序
         oee_values = sorted(set(oee_values))  # 确保唯一性和确定性顺序
 
-        print("Found ST events:", st_values)
-        print("Found OEE events:", oee_values)
+        # print("Found ST events:", st_values)
+        # print("Found OEE events:", oee_values)
 
         # 首先分配 ST 事件的 ID
         idx = 0
@@ -93,9 +93,9 @@ class ErrorLogDLHPDataset(Dataset):
 
         self.id2event = {i: e for e, i in self.event2id.items()}
 
-        print("Event ID mapping:")
-        for event, idx in sorted(self.event2id.items(), key=lambda x: x[1]):
-            print(f"  {idx}: {event}")
+        # print("Event ID mapping:")
+        # for event, idx in sorted(self.event2id.items(), key=lambda x: x[1]):
+        #     print(f"  {idx}: {event}")
 
         # convert df to list of sequences grouped by day or file (simple choice)
         # Here we treat each file as one sequence
