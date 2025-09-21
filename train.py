@@ -10,11 +10,12 @@ import time
 import torch
 from dlhp.models.model_exmaple import DLHPExact, train
 from dlhp.dataloader.dataloader_example import ErrorLogDLHPDataset, create_data_loaders
-
+import glob
 def main():
     # 1. Configuration
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    DATA_PATHS = ["/Users/tr/Desktop/Neural-Hawkes-Process/dlhp/data/ViewECbyOEE_Line1_1.csv"]
+    pattern=r"G:\CodeRemote\Neural-Hawkes-Process\dlhp\data\TrainingSet\*.csv"
+    DATA_PATHS = glob.glob(pattern)
     EPOCHS = 25
     BATCH_SIZE = 2  # Use a small batch size as sequences can be long and memory usage can be high
     LR = 1e-3
