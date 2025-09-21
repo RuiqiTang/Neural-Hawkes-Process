@@ -60,33 +60,22 @@ class ErrorLogDLHPDataset(Dataset):
                     raise ValueError(f"Following ST columns were not found in the data: {', '.join(missing_cols)}")
                 self.st_cols = st_cols
 
-        # build vocab of all event types (ErrorCodes + OEECause)
+        # build vocab of ST error types only
         st_values = []
         for col in self.st_cols:
             st_values.extend(df[col].dropna().unique().tolist())
-        oee_values = df[self.oee_col].dropna().unique().tolist()
 
-        # assign unique ids
+        # assign unique ids (only for ST events)
         self.event2id = {}
         st_values = sorted(set(st_values))  # 确保唯一性和确定性顺序
-        oee_values = sorted(set(oee_values))  # 确保唯一性和确定性顺序
 
         # print("Found ST events:", st_values)
-        # print("Found OEE events:", oee_values)
 
-        # 首先分配 ST 事件的 ID
+        # 分配 ST 事件的 ID
         idx = 0
         for v in st_values:
             if pd.notna(v) and str(v).strip():  # 确保值有效
                 key = f"ST:{v}"
-                if key not in self.event2id:
-                    self.event2id[key] = idx
-                    idx += 1
-
-        # 然后分配 OEE 事件的 ID
-        for v in oee_values:
-            if pd.notna(v) and str(v).strip():  # 确保值有效
-                key = f"OEE:{v}"
                 if key not in self.event2id:
                     self.event2id[key] = idx
                     idx += 1
@@ -109,8 +98,8 @@ class ErrorLogDLHPDataset(Dataset):
                     print(f"Warning: Invalid timestamp in row {row.name}: {row[self.time_col]}")
                     continue
 
-                # Process ST error columns
-                for col in self.st_cols:
+                # Process ST error columns (only the specified ST column)
+                for col in self.st_cols:  # 这里实际上只有一个指定的ST列
                     try:
                         val = row[col]
                         if pd.notna(val) and val != '':  # Check for both NaN and empty string
@@ -123,18 +112,6 @@ class ErrorLogDLHPDataset(Dataset):
                         # This shouldn't happen now due to our column validation, but keep as safety
                         print(f"Warning: Column {col} not found in data")
                         continue
-
-                # Process OEE cause
-                try:
-                    val = row[self.oee_col]
-                    if pd.notna(val) and val != '':
-                        event_key = f"OEE:{val}"
-                        if event_key in self.event2id:
-                            events.append((t, self.event2id[event_key]))
-                        else:
-                            print(f"Warning: Unknown OEE event '{val}'")
-                except KeyError:
-                    print(f"Warning: OEE column {self.oee_col} not found in data")
 
             # sort events by time
             events.sort(key=lambda x: x[0])
